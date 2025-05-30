@@ -1,0 +1,91 @@
+extends Node2D
+
+@onready var cue_ball_scene = preload("res://scenes/cue_ball.tscn")
+@onready var snooker_ball_scene = preload("res://scenes/snooker_ball.tscn")
+@onready var table = $Table
+@onready var spawn_origin = $Table/ball_spawn_origin
+@onready var cue_ball_spawn_pos = Vector2(400, 540)
+@onready var result_label = $Hud
+
+var cue_ball: RigidBody2D
+var balls_left = []
+
+func _ready():
+	spawn_cue_ball()
+	spawn_snooker_balls()
+	connect_pocket_signals()
+
+func spawn_cue_ball():
+	cue_ball = cue_ball_scene.instantiate()
+	cue_ball.position = cue_ball_spawn_pos
+	add_child(cue_ball)
+
+func spawn_snooker_balls():
+	var pink_pos = spawn_origin.global_position
+	var red_rows = 5
+	var red_spacing = 20
+
+	# Spawn red balls in triangle to the left of pink
+	for row in range(red_rows):
+		for i in range(row + 1):
+			var x = pink_pos.x - red_spacing * row
+			@warning_ignore("integer_division")
+			var y = pink_pos.y - red_spacing * row / 2 + i * red_spacing
+			var ball = snooker_ball_scene.instantiate()
+			ball.position = Vector2(x, y)
+			ball.get_node("Sprite2D").texture = load("res://assets/snooker_balls/red_ball.png")
+			add_child(ball)
+			balls_left.append(ball)
+
+	# Colored balls relative to pink
+	var color_offsets = {
+		"yellow": Vector2(200, 60),
+		"green":  Vector2(200, -60),
+		"brown":  Vector2(200, 0),
+		"blue":   Vector2(100, 0),
+		"black":  Vector2(-140, 0),
+		"pink":   Vector2(25, 0)
+	}
+
+	var color_files = {
+		"yellow": "yellow_ball.png",
+		"green": "green_ball.png",
+		"brown": "brown_ball.png",
+		"blue": "blue_ball.png",
+		"pink": "pink_ball.png",
+		"black": "black_ball.png"
+	}
+
+	for color in color_offsets.keys():
+		var offset = color_offsets[color]
+		var texture_file = color_files[color]
+		var texture = load("res://assets/snooker_balls/" + texture_file)
+
+		var ball = snooker_ball_scene.instantiate()
+		ball.position = pink_pos + offset
+		ball.get_node("Sprite2D").texture = texture
+		add_child(ball)
+		balls_left.append(ball)
+
+func connect_pocket_signals():
+	for pocket in $Table.get_children():
+		if "Pocket" in pocket.name and pocket.has_signal("body_entered"):
+			pocket.connect("body_entered", Callable(self, "_on_pocket_body_entered"))
+
+func _on_pocket_body_entered(body: Node):
+	print("Pocket detected:", body.name)
+
+	if body == cue_ball:
+		cue_ball.queue_free()
+		await get_tree().create_timer(1.0).timeout
+		spawn_cue_ball()
+	elif body is RigidBody2D and body != cue_ball:
+		body.queue_free()
+		balls_left.erase(body)
+		if balls_left.is_empty():
+			show_result("You potted all balls!")
+
+
+func show_result(text: String):
+	result_label.text = text
+	result_label.visible = true
