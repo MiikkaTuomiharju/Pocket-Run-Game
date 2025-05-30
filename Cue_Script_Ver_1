@@ -1,0 +1,58 @@
+extends RigidBody2D
+
+signal shot_taken
+
+@export var power_multiplier: float = 15.0
+@export var max_pull_distance: float = 100.0
+
+
+var is_pulling := false
+var pull_start_position: Vector2
+var ghost_ball: Sprite2D
+
+@onready var sprite := $Sprite2D
+
+func _ready():
+	global_position = Vector2(900, 350)  # Set to desired position on your table
+	if sprite:
+		ghost_ball = Sprite2D.new()
+		ghost_ball.texture = sprite.texture
+		ghost_ball.modulate = Color(1, 1, 1, 0.4)
+		ghost_ball.visible = false
+		add_child(ghost_ball)
+
+func _input(event):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed and not is_pulling and linear_velocity.length_squared() < 1:
+			is_pulling = true
+			pull_start_position = get_global_mouse_position()
+			if ghost_ball:
+				ghost_ball.visible = true
+		elif not event.pressed and is_pulling:
+			is_pulling = false
+			var release_position = get_global_mouse_position()
+			var pull_vector = pull_start_position - release_position
+			var pull_distance = pull_vector.length()
+			if pull_distance > 0:
+				var clamped_distance = min(pull_distance, max_pull_distance)
+				var direction = pull_vector.normalized()
+				var force = direction * clamped_distance * power_multiplier
+				print("Impulse applied: ", force)
+				apply_impulse(force)
+				emit_signal("shot_taken")
+			if ghost_ball:
+				ghost_ball.visible = false
+
+	if is_pulling and event is InputEventMouseMotion:
+		var current_mouse_position = get_global_mouse_position()
+		var pull_vector = pull_start_position - current_mouse_position
+		var pull_distance = pull_vector.length()
+		var clamped_distance = min(pull_distance, max_pull_distance)
+		var direction = pull_vector.normalized()
+		if ghost_ball and ghost_ball.visible:
+			ghost_ball.global_position = global_position - direction * clamped_distance
+
+func _physics_process(_delta):
+	# Optional debug
+	# print("Velocity:", linear_velocity)
+	pass
